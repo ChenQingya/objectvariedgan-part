@@ -715,14 +715,9 @@ class ObjectDiscriminator(nn.Module):
 
         kw = 4
         padw = 1
-        sequence_img = [
+        sequence = [
             # Use spectral normalization
-            SpectralNorm(nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw)),
-            nn.LeakyReLU(0.2, True)
-        ]
-        sequence_seg = [
-            # Use spectral normalization
-            SpectralNorm(nn.Conv2d(ins_per, ndf, kernel_size=kw, stride=2, padding=padw)),
+            SpectralNorm(nn.Conv2d(input_nc+1, ndf, kernel_size=kw, stride=2, padding=padw)),
             nn.LeakyReLU(0.2, True)
         ]
 
@@ -731,53 +726,35 @@ class ObjectDiscriminator(nn.Module):
         for n in range(1, n_layers):
             nf_mult_prev = nf_mult
             nf_mult = min(2**n, 8)
-            sequence_img += [
+            sequence += [
                 # Use spectral normalization
                 SpectralNorm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw, bias=use_bias)),
                 norm_layer(ndf * nf_mult),
                 nn.LeakyReLU(0.2, True)
             ]
-            sequence_seg += [
-                # Use spectral normalization
-                SpectralNorm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=2, padding=padw,
-                                       bias=use_bias)),
-                norm_layer(ndf * nf_mult),
-                nn.LeakyReLU(0.2, True)
-            ]
+
 
         nf_mult_prev = nf_mult
         nf_mult = min(2**n_layers, 8)
-        sequence_img += [
+        sequence += [
             # Use spectral normalization
             SpectralNorm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias)),
             norm_layer(ndf * nf_mult),
             nn.LeakyReLU(0.2, True)
         ]
-        sequence_seg += [
-            # Use spectral normalization
-            SpectralNorm(
-                nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=kw, stride=1, padding=padw, bias=use_bias)),
-            norm_layer(ndf * nf_mult),
-            nn.LeakyReLU(0.2, True)
-        ]
+
+
 
         # Use spectral normalization
-        sequence_img += [SpectralNorm(nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw))]
-        sequence_seg += [SpectralNorm(nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw))]
+        sequence += [SpectralNorm(nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw))]
 
         if use_sigmoid:
-            sequence_img += [nn.Sigmoid()]
-            sequence_seg += [nn.Sigmoid()]
+            sequence += [nn.Sigmoid()]
 
-        self.model_img = nn.Sequential(*sequence_img)
-        self.model_seg = nn.Sequential(*sequence_seg)
+        self.model = nn.Sequential(*sequence)
 
     def forward(self, input):
-        input_img = input[:, :3, :, :]  # (B, CX, W, H) torch.Size([1, 3, 256, 256])
-        input_seg = input[:, 3:, :, :]
-        result_img = self.model_img(input_img)
-        result_seg = self.model_seg(input_seg)
-        result = torch.cat([result_img, result_seg], dim=1)
+        result = self.model(input)
         return result
 
 # PatchGAN discriminator for "set" of instance attributes
